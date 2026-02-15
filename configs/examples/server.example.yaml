@@ -1,0 +1,43 @@
+# p4admin configuration example
+# Copy to server.yaml and customize for your environment.
+# All fields are optional — p4admin will use P4 environment variables
+# and sensible defaults for anything not specified here.
+
+# Server connection
+# If not specified, uses P4PORT, P4USER, P4CLIENT environment variables
+server:
+  port: "ssl:perforce.yourstudio.com:1666"
+  user: "admin"
+  # client: "admin-workspace"  # Optional — not needed for most tools
+  charset: "utf8"
+
+# Output defaults
+output:
+  format: "terminal"    # terminal, json, markdown, html
+  color: true
+  verbose: false
+
+# License & support info
+# Shown in the health dashboard for quick reference
+licensing:
+  support_email: "it@yourstudio.com"
+  perforce_rep: "your.rep@perforce.com"
+  renewal_warning_days: 30
+  portal_url: "https://www.perforce.com/support"
+  license_renewal_url: "https://www.perforce.com/support/request-license"
+
+# Thresholds for stale/inactive detection
+thresholds:
+  stale_workspace_days: 90
+  stale_shelf_days: 60
+  inactive_user_days: 90
+  max_file_size_mb: 500
+
+  # Workspace patterns to always exclude from cleanup
+  # (CI/CD workspaces, build machines, service accounts, etc.)
+  exclude_patterns:
+    - "build-*"
+    - "ci-*"
+    - "jenkins-*"
+    - "render-*"
+    - "svc-*"

@@ -1,0 +1,73 @@
+# Example production scaffolding config.
+# Copy and customize for each new production.
+#
+# Usage:
+#   p4admin scaffold configs/productions/my-project.yaml           # Preview
+#   p4admin scaffold configs/productions/my-project.yaml --apply    # Create
+
+production:
+  name: "titan"
+  description: "Project Titan - Animated Feature"
+
+# Depot configuration
+depot:
+  name: "titan"
+  type: "stream"
+
+# Stream hierarchy
+streams:
+  - name: "main"
+    type: "mainline"
+    description: "Main integration branch — stable, production-ready"
+
+  - name: "dev"
+    type: "development"
+    parent: "//titan/main"
+    description: "Active development — daily work happens here"
+
+  - name: "release"
+    type: "release"
+    parent: "//titan/main"
+    description: "Release candidates — locked down for delivery"
+
+# Permission groups (role-based)
+groups:
+  - name: "titan-artists"
+    description: "Titan production artists"
+    max_results: 10000
+    max_scan_rows: 100000
+
+  - name: "titan-leads"
+    description: "Titan department leads"
+    max_results: 50000
+    max_scan_rows: 500000
+    subgroups: ["titan-artists"]
+
+  - name: "titan-pipeline"
+    description: "Titan pipeline / TDs"
+    max_results: 100000
+    max_scan_rows: 1000000
+
+  - name: "titan-admins"
+    description: "Titan P4 admins"
+    subgroups: ["titan-leads", "titan-pipeline"]
+
+# Protection table entries
+# NOTE: These are logged for manual review — auto-modifying
+# the protections table is intentionally conservative.
+protections:
+  - access: "read"
+    group: "titan-artists"
+    path: "//titan/..."
+
+  - access: "write"
+    group: "titan-artists"
+    path: "//titan/dev/..."
+
+  - access: "write"
+    group: "titan-leads"
+    path: "//titan/..."
+
+  - access: "admin"
+    group: "titan-admins"
+    path: "//titan/..."
