@@ -30,6 +30,7 @@ from typing import Any
 
 from p4admin.core.connection import P4Connection
 from p4admin.core.output import ReportData
+from p4admin.core.utils import format_bytes, parse_p4_date
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +65,7 @@ class ShelvedChangeInfo:
         """Human-readable size."""
         if self.total_size == 0:
             return "Unknown"
-        for unit in ["B", "KB", "MB", "GB"]:
-            if self.total_size < 1024:
-                return f"{self.total_size:.1f} {unit}"
-            self.total_size /= 1024
-        return f"{self.total_size:.1f} TB"
+        return format_bytes(self.total_size)
 
 
 class OrphanedShelfCleaner:
@@ -204,9 +201,10 @@ class OrphanedShelfCleaner:
                 )
             else:
                 try:
-                    self.conn.run("shelve", "-df", "-c", str(shelf.change_number))
-                    # After unshelving files, delete the empty changelist
-                    self.conn.run_safe("change", "-df", str(shelf.change_number))
+                    # Delete shelved files (-d = delete, -f = force/admin)
+                    self.conn.run("shelve", "-d", "-f", "-c", str(shelf.change_number))
+                    # After removing shelved files, delete the empty changelist
+                    self.conn.run_safe("change", "-d", "-f", str(shelf.change_number))
                     logger.info("Deleted shelved CL %d (owner: %s)", shelf.change_number, shelf.owner)
                 except Exception as e:
                     logger.error("Failed to delete shelved CL %d: %s", shelf.change_number, e)
@@ -236,7 +234,7 @@ class OrphanedShelfCleaner:
             change_number=change_num,
             owner=change_data.get("user", ""),
             description=change_data.get("desc", "").strip(),
-            date=self._parse_p4_date(change_data.get("time")),
+            date=parse_p4_date(change_data.get("time")),
             client=change_data.get("client", ""),
         )
 
@@ -264,14 +262,3 @@ class OrphanedShelfCleaner:
 
         return info
 
-    @staticmethod
-    def _parse_p4_date(date_str: str | None) -> datetime | None:
-        if not date_str:
-            return None
-        try:
-            return datetime.fromtimestamp(int(date_str))
-        except (ValueError, TypeError):
-            try:
-                return datetime.strptime(date_str, "%Y/%m/%d %H:%M:%S")
-            except (ValueError, TypeError):
-                return None

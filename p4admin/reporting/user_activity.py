@@ -26,6 +26,7 @@ from typing import Any
 
 from p4admin.core.connection import P4Connection
 from p4admin.core.output import ReportData
+from p4admin.core.utils import parse_p4_date
 
 logger = logging.getLogger(__name__)
 
@@ -221,21 +222,16 @@ class UserActivityReport:
         )
 
         # Parse last access
-        access_str = user_data.get("Access")
-        if access_str:
-            try:
-                activity.last_access = datetime.fromtimestamp(int(access_str))
-            except (ValueError, TypeError):
-                pass
+        activity.last_access = parse_p4_date(user_data.get("Access"))
 
         # Count workspaces
         clients, _ = self.conn.run_safe("clients", "-u", username)
         activity.workspace_count = len(clients) if clients else 0
 
-        # Count recent submits
+        # Count recent submits (date range must be attached to a filespec)
         cutoff_str = self._cutoff.strftime("%Y/%m/%d")
         recent_changes, _ = self.conn.run_safe(
-            "changes", "-u", username, "-s", "submitted", f"@{cutoff_str},@now"
+            "changes", "-u", username, "-s", "submitted", f"//...@{cutoff_str},@now"
         )
         activity.recent_submits = len(recent_changes) if recent_changes else 0
 
@@ -263,14 +259,11 @@ class UserActivityReport:
                 group_detail, _ = self.conn.run_safe("group", "-o", group_name)
                 if group_detail:
                     detail = group_detail[0] if isinstance(group_detail, list) else group_detail
-                    # Members can be in Users0, Users1, etc.
-                    idx = 0
-                    while True:
-                        user = detail.get(f"Users{idx}")
-                        if user is None:
-                            break
-                        user_groups.setdefault(user, []).append(group_name)
-                        idx += 1
+                    # p4python form-parsing returns Users as a Python list
+                    members = detail.get("Users", [])
+                    if isinstance(members, list):
+                        for user in members:
+                            user_groups.setdefault(user, []).append(group_name)
 
         except Exception as e:
             logger.warning("Error getting group membership: %s", e)

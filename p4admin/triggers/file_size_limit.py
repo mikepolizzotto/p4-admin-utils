@@ -94,11 +94,12 @@ EXEMPT_USERS: set[str] = {
 
 def format_size(size_bytes: int) -> str:
     """Convert bytes to human-readable string."""
+    size = float(size_bytes)
     for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if abs(size_bytes) < 1024:
-            return f"{size_bytes:.1f} {unit}"
-        size_bytes /= 1024
-    return f"{size_bytes:.1f} PB"
+        if abs(size) < 1024:
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} PB"
 
 
 def get_limit_for_file(depot_path: str) -> int | None:

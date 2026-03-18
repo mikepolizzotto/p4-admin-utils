@@ -355,9 +355,10 @@ class PermissionTemplateManager:
         if group["timeout"] != "unset":
             spec["Timeout"] = str(group["timeout"])
 
-        # Add subgroups
-        for i, sg in enumerate(group.get("subgroups", [])):
-            spec[f"Subgroups{i}"] = sg
+        # p4python form-parsing expects Subgroups as a list
+        subgroups = group.get("subgroups", [])
+        if subgroups:
+            spec["Subgroups"] = list(subgroups)
 
         self.conn.run("group", "-i", input=spec)
         logger.info("Created group: %s", group["name"])
