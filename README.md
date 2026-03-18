@@ -158,7 +158,7 @@ All tools support multiple output formats:
 ```
 p4-admin-utils/
 ├── p4admin/
-│   ├── core/              # P4 connection, config, output formatting
+│   ├── core/              # P4 connection, config, output formatting, shared utils
 │   ├── cleanup/           # Workspace, shelf, changelist cleanup
 │   │   ├── stale_workspaces.py
 │   │   ├── orphaned_shelves.py
