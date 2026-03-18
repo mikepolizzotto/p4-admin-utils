@@ -46,6 +46,9 @@ p4admin = "p4admin.cli.main:cli"
 Homepage = "https://github.com/mikepolizzotto/p4-admin-utils"
 Issues = "https://github.com/mikepolizzotto/p4-admin-utils/issues"
 
+[tool.setuptools.packages.find]
+include = ["p4admin*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

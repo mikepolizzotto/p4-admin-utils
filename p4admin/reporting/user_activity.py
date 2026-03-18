@@ -94,15 +94,34 @@ class UserActivityReport:
         users = self.conn.run("users")
         logger.info("Found %d users", len(users))
 
+        # Batch-fetch data to avoid per-user P4 calls (the main perf fix).
+        # Instead of 4 calls x N users, we do ~5 bulk queries total.
+        logger.info("Fetching workspace and changelist data in bulk...")
+        workspace_counts = self._batch_workspace_counts(users)
+        submit_counts = self._batch_recent_submits()
+        pending_counts = self._batch_change_counts("pending")
+        shelved_counts = self._batch_change_counts("shelved")
+
         # Get group membership if requested
         group_map: dict[str, list[str]] = {}
         if self.include_groups:
             group_map = self._get_user_groups()
 
-        # Analyze each user
+        # Build activity records from bulk data (no per-user P4 calls)
         activities: list[UserActivity] = []
         for user_data in users:
-            activity = self._analyze_user(user_data, group_map)
+            username = user_data.get("User", "")
+            activity = UserActivity(
+                username=username,
+                full_name=user_data.get("FullName", ""),
+                email=user_data.get("Email", ""),
+                last_access=parse_p4_date(user_data.get("Access")),
+                workspace_count=workspace_counts.get(username, 0),
+                recent_submits=submit_counts.get(username, 0),
+                pending_changes=pending_counts.get(username, 0),
+                shelved_changes=shelved_counts.get(username, 0),
+                groups=group_map.get(username, []),
+            )
             activities.append(activity)
 
         # Categorize
@@ -208,41 +227,44 @@ class UserActivityReport:
 
         return report
 
-    def _analyze_user(
-        self, user_data: dict[str, Any], group_map: dict[str, list[str]]
-    ) -> UserActivity:
-        """Analyze activity for a single user."""
-        username = user_data.get("User", "")
+    def _batch_workspace_counts(self, users: list[dict[str, Any]]) -> dict[str, int]:
+        """Get workspace counts for all users in one query."""
+        counts: dict[str, int] = {}
+        clients, _ = self.conn.run_safe("clients")
+        if clients:
+            for client in clients:
+                owner = client.get("Owner", "")
+                counts[owner] = counts.get(owner, 0) + 1
+        logger.info("Counted workspaces for %d owners from %d total clients",
+                     len(counts), len(clients) if clients else 0)
+        return counts
 
-        activity = UserActivity(
-            username=username,
-            full_name=user_data.get("FullName", ""),
-            email=user_data.get("Email", ""),
-            groups=group_map.get(username, []),
-        )
-
-        # Parse last access
-        activity.last_access = parse_p4_date(user_data.get("Access"))
-
-        # Count workspaces
-        clients, _ = self.conn.run_safe("clients", "-u", username)
-        activity.workspace_count = len(clients) if clients else 0
-
-        # Count recent submits (date range must be attached to a filespec)
+    def _batch_recent_submits(self) -> dict[str, int]:
+        """Get recent submit counts per user in one query."""
+        counts: dict[str, int] = {}
         cutoff_str = self._cutoff.strftime("%Y/%m/%d")
-        recent_changes, _ = self.conn.run_safe(
-            "changes", "-u", username, "-s", "submitted", f"//...@{cutoff_str},@now"
+        changes, _ = self.conn.run_safe(
+            "changes", "-s", "submitted", f"//...@{cutoff_str},@now"
         )
-        activity.recent_submits = len(recent_changes) if recent_changes else 0
+        if changes:
+            for change in changes:
+                user = change.get("user", "")
+                counts[user] = counts.get(user, 0) + 1
+        logger.info("Counted %d recent submits across %d users",
+                     sum(counts.values()), len(counts))
+        return counts
 
-        # Count pending/shelved
-        pending, _ = self.conn.run_safe("changes", "-u", username, "-s", "pending")
-        activity.pending_changes = len(pending) if pending else 0
-
-        shelved, _ = self.conn.run_safe("changes", "-u", username, "-s", "shelved")
-        activity.shelved_changes = len(shelved) if shelved else 0
-
-        return activity
+    def _batch_change_counts(self, status: str) -> dict[str, int]:
+        """Get pending or shelved changelist counts per user in one query."""
+        counts: dict[str, int] = {}
+        changes, _ = self.conn.run_safe("changes", "-s", status)
+        if changes:
+            for change in changes:
+                user = change.get("user", "")
+                counts[user] = counts.get(user, 0) + 1
+        logger.info("Counted %d %s changelists across %d users",
+                     sum(counts.values()), status, len(counts))
+        return counts
 
     def _get_user_groups(self) -> dict[str, list[str]]:
         """Build a map of user -> groups they belong to."""
