@@ -185,7 +185,7 @@ class ProductionScaffolder:
         )
 
         for action in actions:
-            status_icon = {"created": "OK", "skipped": "EXISTS", "failed": "FAILED", "pending": "PENDING"}
+            status_icon = {"created": "OK", "skipped": "EXISTS", "failed": "FAILED", "pending": "PENDING", "manual": "MANUAL"}
             report.add_section(
                 title=f"{action.action_type}: {action.target}",
                 stats={
@@ -327,34 +327,32 @@ class ProductionScaffolder:
         if action.details.get("max_scan_rows") != "unset":
             spec["MaxScanRows"] = str(action.details.get("max_scan_rows", "unset"))
 
-        # Add subgroups
+        # p4python form-parsing expects Subgroups as a list
         subgroups = action.details.get("subgroups", "")
         if subgroups:
-            for i, sg in enumerate(subgroups.split(", ")):
-                if sg:
-                    spec[f"Subgroups{i}"] = sg
+            sg_list = [sg.strip() for sg in subgroups.split(",") if sg.strip()]
+            if sg_list:
+                spec["Subgroups"] = sg_list
 
         self.conn.run("group", "-i", input=spec)
         action.status = "created"
         logger.info("Created group: %s", action.target)
 
     def _add_protection(self, action: ScaffoldAction):
-        """Add a protection entry (appends to existing protections table)."""
-        # This is intentionally simplified — full protection table management
-        # is complex and risky to automate. We log what should be added.
-        action.status = "pending"
+        """Log a protection entry for manual review (not auto-applied)."""
+        # Full protection table management is complex and risky to automate.
+        # Modifying it programmatically requires fetching the full table,
+        # appending, and writing back — a mistake can lock everyone out.
+        # We log what should be added and mark it for manual review.
         logger.info(
-            "Protection entry to add: %s %s %s * %s",
+            "Protection entry to add manually: %s %s %s * %s",
             action.details.get("access"),
             "group",
             action.details.get("group"),
             action.details.get("path"),
         )
-        # In practice, modifying the protections table programmatically
-        # requires fetching the full table, appending, and writing back.
-        # We mark this as needing manual review for safety.
-        action.status = "created"
-        action.error = "Review protections table manually — auto-modification is risky"
+        action.status = "manual"
+        action.error = "Add to protections table manually — auto-modification is too risky"
 
     def _depot_exists(self, name: str) -> bool:
         """Check if a depot already exists."""

@@ -26,6 +26,7 @@ from typing import Any
 
 from p4admin.core.connection import P4Connection
 from p4admin.core.output import ReportData
+from p4admin.core.utils import parse_p4_date
 
 logger = logging.getLogger(__name__)
 
@@ -228,11 +229,12 @@ class ServerHealthCheck:
         return report
 
     def _get_license_info(self) -> LicenseInfo:
-        """Parse license information from the server."""
+        """Parse license information from the server using `p4 license -u`."""
         info = LicenseInfo()
 
         try:
-            license_data, errors = self.conn.run_safe("license", "-o")
+            # Use -u for structured usage data (not -o which returns raw license text)
+            license_data, errors = self.conn.run_safe("license", "-u")
             if errors:
                 logger.warning("Could not retrieve license info: %s", errors)
                 info.is_valid = False
@@ -242,30 +244,32 @@ class ServerHealthCheck:
                 data = license_data[0] if isinstance(license_data, list) else license_data
                 info.raw_data = data
 
-                info.license_type = data.get("License", "Unknown")
+                # Detect license type from isLicensed field
+                is_licensed = data.get("isLicensed", "no")
+                info.license_type = "Licensed" if is_licensed == "yes" else "Unlicensed"
 
                 # Parse user limit
-                user_limit = data.get("Users", data.get("userLimit"))
-                if user_limit and str(user_limit).lower() != "unlimited":
+                user_limit = data.get("userLimit")
+                if user_limit and str(user_limit).lower() not in ("unlimited", "0"):
                     try:
                         info.user_limit = int(user_limit)
                     except (ValueError, TypeError):
                         pass
 
                 # Parse client limit
-                client_limit = data.get("Clients", data.get("clientLimit"))
-                if client_limit and str(client_limit).lower() != "unlimited":
+                client_limit = data.get("clientLimit")
+                if client_limit and str(client_limit).lower() not in ("unlimited", "0"):
                     try:
                         info.client_limit = int(client_limit)
                     except (ValueError, TypeError):
                         pass
 
-                # Parse expiration
-                exp_str = data.get("Expiration", data.get("expDate"))
+                # Parse expiration (epoch timestamp from licenseExpires)
+                exp_str = data.get("licenseExpires")
                 if exp_str:
-                    info.expiration = self._parse_date(exp_str)
+                    info.expiration = parse_p4_date(exp_str)
 
-                info.ip_address = data.get("IP", "")
+                info.ip_address = data.get("serverAddress", "")
 
         except Exception as e:
             logger.error("Error getting license info: %s", e)
@@ -288,39 +292,28 @@ class ServerHealthCheck:
                 full_name = user.get("FullName", "")
                 access_str = user.get("Access")
 
-                if access_str:
-                    try:
-                        last_access = datetime.fromtimestamp(int(access_str))
-                        if last_access >= cutoff:
-                            usage.active_users += 1
-                        else:
-                            days_inactive = (datetime.now() - last_access).days
-                            usage.inactive_users += 1
-                            usage.inactive_user_list.append({
-                                "user": username,
-                                "full_name": full_name,
-                                "email": email,
-                                "last_access": last_access.strftime("%Y-%m-%d"),
-                                "days_inactive": days_inactive,
-                            })
-                    except (ValueError, TypeError):
-                        # Can't parse access time — count as inactive
+                last_access = parse_p4_date(access_str) if access_str else None
+                if last_access is not None:
+                    if last_access >= cutoff:
+                        usage.active_users += 1
+                    else:
+                        days_inactive = (datetime.now() - last_access).days
                         usage.inactive_users += 1
                         usage.inactive_user_list.append({
                             "user": username,
                             "full_name": full_name,
                             "email": email,
-                            "last_access": "Unknown",
-                            "days_inactive": "N/A",
+                            "last_access": last_access.strftime("%Y-%m-%d"),
+                            "days_inactive": days_inactive,
                         })
                 else:
-                    # No access time recorded
+                    # No access time or unparseable — count as inactive
                     usage.inactive_users += 1
                     usage.inactive_user_list.append({
                         "user": username,
                         "full_name": full_name,
                         "email": email,
-                        "last_access": "Never",
+                        "last_access": "Never" if not access_str else "Unknown",
                         "days_inactive": "N/A",
                     })
 
@@ -368,24 +361,3 @@ class ServerHealthCheck:
             f"{usage.reclaimable_seats} reclaimable)"
         )
 
-    @staticmethod
-    def _parse_date(date_str: str) -> datetime | None:
-        """Try multiple date formats common in P4 output."""
-        formats = [
-            "%Y/%m/%d",
-            "%Y/%m/%d %H:%M:%S",
-            "%Y-%m-%d",
-            "%Y-%m-%d %H:%M:%S",
-        ]
-        for fmt in formats:
-            try:
-                return datetime.strptime(date_str.strip(), fmt)
-            except (ValueError, TypeError):
-                continue
-
-        # Try epoch timestamp
-        try:
-            return datetime.fromtimestamp(int(date_str))
-        except (ValueError, TypeError):
-            logger.warning("Could not parse date: %s", date_str)
-            return None

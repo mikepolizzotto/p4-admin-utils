@@ -32,19 +32,9 @@ from typing import Any
 
 from p4admin.core.connection import P4Connection
 from p4admin.core.output import ReportData
+from p4admin.core.utils import format_bytes
 
 logger = logging.getLogger(__name__)
-
-
-def format_bytes(size_bytes: int) -> str:
-    """Convert bytes to human-readable string."""
-    if size_bytes == 0:
-        return "0 B"
-    for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if abs(size_bytes) < 1024:
-            return f"{size_bytes:.1f} {unit}"
-        size_bytes /= 1024
-    return f"{size_bytes:.1f} PB"
 
 
 @dataclass

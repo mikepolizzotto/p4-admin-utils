@@ -30,6 +30,7 @@ from typing import Any
 
 from p4admin.core.connection import P4Connection
 from p4admin.core.output import ReportData
+from p4admin.core.utils import parse_p4_date
 
 logger = logging.getLogger(__name__)
 
@@ -229,8 +230,8 @@ class StreamHealthCheck:
             stream_type=stream_data.get("Type", "unknown"),
             owner=stream_data.get("Owner", ""),
             description=stream_data.get("desc", stream_data.get("Description", "")).strip(),
-            access=self._parse_p4_date(stream_data.get("Access")),
-            update=self._parse_p4_date(stream_data.get("Update")),
+            access=parse_p4_date(stream_data.get("Access")),
+            update=parse_p4_date(stream_data.get("Update")),
         )
 
     def _analyze_stream(self, info: StreamInfo, stream_map: dict[str, StreamInfo]):
@@ -266,14 +267,3 @@ class StreamHealthCheck:
 
         return 1 + self._compute_depth(info.parent, stream_map, seen)
 
-    @staticmethod
-    def _parse_p4_date(date_str: str | None) -> datetime | None:
-        if not date_str:
-            return None
-        try:
-            return datetime.fromtimestamp(int(date_str))
-        except (ValueError, TypeError):
-            try:
-                return datetime.strptime(date_str, "%Y/%m/%d %H:%M:%S")
-            except (ValueError, TypeError):
-                return None

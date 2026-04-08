@@ -379,17 +379,14 @@ class TypemapManager:
             result = self.conn.run("typemap", "-o")
             if result:
                 spec = result[0] if isinstance(result, list) else result
-                # Parse TypeMap field — entries are indexed as TypeMap0, TypeMap1, etc.
+                # p4python form-parsing returns TypeMap as a Python list of strings
                 entries = []
-                idx = 0
-                while True:
-                    entry = spec.get(f"TypeMap{idx}")
-                    if entry is None:
-                        break
-                    parts = entry.strip().split(None, 1)
-                    if len(parts) == 2:
-                        entries.append((parts[0], parts[1]))
-                    idx += 1
+                typemap_entries = spec.get("TypeMap", [])
+                if isinstance(typemap_entries, list):
+                    for entry in typemap_entries:
+                        parts = entry.strip().split(None, 1)
+                        if len(parts) == 2:
+                            entries.append((parts[0], parts[1]))
                 return entries
         except Exception as e:
             logger.warning("Could not read current typemap: %s", e)
@@ -410,15 +407,13 @@ class TypemapManager:
             result = self.conn.run("typemap", "-o")
             spec = result[0] if isinstance(result, list) else result
 
-            # Find the next available index
-            idx = 0
-            while f"TypeMap{idx}" in spec:
-                idx += 1
-
-            # Append new entries
+            # p4python form-parsing returns TypeMap as a list — append to it
+            existing = spec.get("TypeMap", [])
+            if not isinstance(existing, list):
+                existing = []
             for entry_type, pattern in new_entries:
-                spec[f"TypeMap{idx}"] = f"{entry_type} {pattern}"
-                idx += 1
+                existing.append(f"{entry_type} {pattern}")
+            spec["TypeMap"] = existing
 
             self.conn.run("typemap", "-i", input=spec)
             logger.info("Added %d typemap entries", len(new_entries))

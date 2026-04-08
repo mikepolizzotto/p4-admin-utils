@@ -30,6 +30,7 @@ from typing import Any
 
 from p4admin.core.connection import P4Connection
 from p4admin.core.output import ReportData
+from p4admin.core.utils import parse_p4_date
 
 logger = logging.getLogger(__name__)
 
@@ -243,10 +244,10 @@ class StaleWorkspaceFinder:
                 logger.info("[DRY RUN] Would delete workspace: %s (owner: %s)", ws.name, ws.owner)
             else:
                 try:
-                    # Revert any open files first
-                    self.conn.run_safe("revert", "-k", "-c", "default", f"//{ws.name}/...")
-                    # Delete the workspace
-                    self.conn.run("client", "-df", ws.name)
+                    # Revert any open files first (use -C to target another user's workspace)
+                    self.conn.run_safe("revert", "-k", "-C", ws.name, "//...")
+                    # Delete the workspace (-d = delete, -f = force)
+                    self.conn.run("client", "-d", "-f", ws.name)
                     logger.info("Deleted workspace: %s (owner: %s)", ws.name, ws.owner)
                 except Exception as e:
                     logger.error("Failed to delete workspace %s: %s", ws.name, e)
@@ -276,8 +277,8 @@ class StaleWorkspaceFinder:
         owner = ws_data.get("Owner", "")
 
         # Parse timestamps
-        access = self._parse_p4_date(ws_data.get("Access"))
-        update = self._parse_p4_date(ws_data.get("Update"))
+        access = parse_p4_date(ws_data.get("Access"))
+        update = parse_p4_date(ws_data.get("Update"))
 
         info = WorkspaceInfo(
             name=name,
@@ -331,18 +332,3 @@ class StaleWorkspaceFinder:
                 return True
         return False
 
-    @staticmethod
-    def _parse_p4_date(date_str: str | None) -> datetime | None:
-        """Parse a P4 date string into a datetime object."""
-        if not date_str:
-            return None
-        try:
-            # P4 typically returns epoch timestamps as strings
-            return datetime.fromtimestamp(int(date_str))
-        except (ValueError, TypeError):
-            try:
-                # Some P4 commands return formatted dates
-                return datetime.strptime(date_str, "%Y/%m/%d %H:%M:%S")
-            except (ValueError, TypeError):
-                logger.warning("Could not parse date: %s", date_str)
-                return None

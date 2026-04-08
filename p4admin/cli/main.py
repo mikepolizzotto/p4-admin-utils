@@ -575,15 +575,18 @@ def permissions(ctx, template, production, list_templates, dry_run, do_apply, ou
 
 def _output_report(report, output_path, output_format):
     """Handle report output to terminal and/or file."""
-    if output_format == "terminal" or not output_path:
-        render_terminal(report, console)
-
-    if output_format == "json" and not output_path:
-        console.print(render_json(report))
-
     if output_path:
+        # Save to file; render terminal preview only for terminal format
         save_report(report, output_path, output_format if output_format != "terminal" else None)
+        if output_format == "terminal":
+            render_terminal(report, console)
         console.print(f"\n[green]Report saved to:[/green] {output_path}")
+    elif output_format == "json":
+        # JSON to stdout only (no terminal rendering)
+        console.print(render_json(report))
+    else:
+        # Terminal rendering (default)
+        render_terminal(report, console)
 
 
 def main():

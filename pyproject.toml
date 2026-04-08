@@ -30,7 +30,6 @@ dependencies = [
     "rich>=13.0",
     "click>=8.0",
     "pyyaml>=6.0",
-    "jinja2>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +45,9 @@ p4admin = "p4admin.cli.main:cli"
 [project.urls]
 Homepage = "https://github.com/mikepolizzotto/p4-admin-utils"
 Issues = "https://github.com/mikepolizzotto/p4-admin-utils/issues"
+
+[tool.setuptools.packages.find]
+include = ["p4admin*"]
 
 [tool.ruff]
 line-length = 100

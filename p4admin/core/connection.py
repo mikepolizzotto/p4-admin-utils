@@ -71,6 +71,7 @@ class P4Connection:
     password: str | None = None
     _p4: P4 = field(default=None, init=False, repr=False)
     _connected: bool = field(default=False, init=False, repr=False)
+    _server_info_cache: dict[str, Any] | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
         self._p4 = P4()
@@ -147,7 +148,8 @@ class P4Connection:
 
         Args:
             *args: Command and arguments (e.g., "clients", "-u", "admin")
-            **kwargs: Passed through to p4.run()
+            **kwargs: Keyword arguments. Use input=<dict|str> to pass spec
+                      data for -i commands. Other kwargs passed to p4.run().
 
         Returns:
             List of result dictionaries from the P4 command.
@@ -158,6 +160,12 @@ class P4Connection:
         """
         if not self._connected:
             self.connect()
+
+        # Handle input= kwarg for spec-based commands (p4python requires
+        # setting p4.input as an attribute, not as a run() keyword arg)
+        input_data = kwargs.pop("input", None)
+        if input_data is not None:
+            self._p4.input = input_data
 
         cmd_str = " ".join(str(a) for a in args)
         logger.debug("Running: p4 %s", cmd_str)
@@ -192,6 +200,11 @@ class P4Connection:
         if not self._connected:
             self.connect()
 
+        # Handle input= kwarg (same as run())
+        input_data = kwargs.pop("input", None)
+        if input_data is not None:
+            self._p4.input = input_data
+
         cmd_str = " ".join(str(a) for a in args)
         logger.debug("Running (safe): p4 %s", cmd_str)
 
@@ -204,10 +217,13 @@ class P4Connection:
 
     @property
     def server_info(self) -> dict[str, Any]:
-        """Get current server info."""
+        """Get current server info (cached after first call)."""
+        if self._server_info_cache is not None:
+            return self._server_info_cache
         if not self._connected:
             self.connect()
-        return self._p4.run("info")[0]
+        self._server_info_cache = self._p4.run("info")[0]
+        return self._server_info_cache
 
     @property
     def is_connected(self) -> bool:

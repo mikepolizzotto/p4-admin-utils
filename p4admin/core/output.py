@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import html as html_module
 import json
 import sys
 from abc import ABC, abstractmethod
@@ -198,25 +199,30 @@ def render_markdown(report: ReportData) -> str:
     return "\n".join(lines)
 
 
+def _esc(value: str) -> str:
+    """Escape a string for safe HTML insertion."""
+    return html_module.escape(str(value))
+
+
 def render_html(report: ReportData) -> str:
     """Render a report as a standalone HTML file."""
     sections_html = []
 
     for section in report.sections:
-        section_parts = [f"<h2>{section.title}</h2>"]
+        section_parts = [f"<h2>{_esc(section.title)}</h2>"]
 
         if section.stats:
             stats_html = "".join(
-                f"<div class='stat'><span class='stat-label'>{k}:</span> "
-                f"<span class='stat-value'>{v}</span></div>"
+                f"<div class='stat'><span class='stat-label'>{_esc(k)}:</span> "
+                f"<span class='stat-value'>{_esc(v)}</span></div>"
                 for k, v in section.stats.items()
             )
             section_parts.append(f"<div class='stats-grid'>{stats_html}</div>")
 
         if section.headers and section.rows:
-            headers = "".join(f"<th>{h}</th>" for h in section.headers)
+            headers = "".join(f"<th>{_esc(h)}</th>" for h in section.headers)
             rows = "".join(
-                "<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>"
+                "<tr>" + "".join(f"<td>{_esc(cell)}</td>" for cell in row) + "</tr>"
                 for row in section.rows
             )
             section_parts.append(
@@ -225,15 +231,15 @@ def render_html(report: ReportData) -> str:
             )
 
         for note in section.notes:
-            section_parts.append(f"<p class='note'>{note}</p>")
+            section_parts.append(f"<p class='note'>{_esc(note)}</p>")
 
         sections_html.append(f"<section>{''.join(section_parts)}</section>")
 
     summary_html = ""
     if report.summary:
         items = "".join(
-            f"<div class='summary-item'><span class='label'>{k}</span>"
-            f"<span class='value'>{v}</span></div>"
+            f"<div class='summary-item'><span class='label'>{_esc(k)}</span>"
+            f"<span class='value'>{_esc(v)}</span></div>"
             for k, v in report.summary.items()
         )
         summary_html = f"<div class='summary-grid'>{items}</div>"
@@ -243,7 +249,7 @@ def render_html(report: ReportData) -> str:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{report.title}</title>
+    <title>{_esc(report.title)}</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
@@ -280,10 +286,10 @@ def render_html(report: ReportData) -> str:
     </style>
 </head>
 <body>
-    <h1>{report.title}</h1>
+    <h1>{_esc(report.title)}</h1>
     <div class="meta">
         Generated: {report.generated_at:%Y-%m-%d %H:%M:%S}
-        {f" | Server: {report.server_info.get('serverAddress', '')}" if report.server_info else ""}
+        {f" | Server: {_esc(report.server_info.get('serverAddress', ''))}" if report.server_info else ""}
     </div>
     {summary_html}
     {''.join(sections_html)}

@@ -29,6 +29,7 @@ from typing import Any
 
 from p4admin.core.connection import P4Connection
 from p4admin.core.output import ReportData
+from p4admin.core.utils import parse_p4_date
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +191,7 @@ class EmptyChangelistPruner:
                 )
             else:
                 try:
-                    self.conn.run("change", "-df", str(info.change_number))
+                    self.conn.run("change", "-d", "-f", str(info.change_number))
                     logger.info("Deleted empty CL %d (owner: %s)", info.change_number, info.owner)
                 except Exception as e:
                     logger.error("Failed to delete CL %d: %s", info.change_number, e)
@@ -218,7 +219,7 @@ class EmptyChangelistPruner:
             owner=change_data.get("user", ""),
             client=change_data.get("client", ""),
             description=change_data.get("desc", "").strip(),
-            date=self._parse_p4_date(change_data.get("time")),
+            date=parse_p4_date(change_data.get("time")),
             owner_exists=change_data.get("user", "") in active_users,
         )
 
@@ -235,11 +236,3 @@ class EmptyChangelistPruner:
 
         return info
 
-    @staticmethod
-    def _parse_p4_date(date_str: str | None) -> datetime | None:
-        if not date_str:
-            return None
-        try:
-            return datetime.fromtimestamp(int(date_str))
-        except (ValueError, TypeError):
-            return None
